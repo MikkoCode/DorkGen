@@ -21,7 +21,7 @@ def read_api_key():
         with open(API_KEY_FILE, 'r') as file:
             return file.read().strip()
     except FileNotFoundError:
-        return '035152430c7a4687882e8b587f0d7a6a'
+        return ''
 
 
 def save_api_key(api_key):
@@ -45,15 +45,16 @@ class DorkGeneratorApp:
         self.run_button = tk.Button(self.root)
         self.pause_button = tk.Button(self.root)
         self.progress = ttk.Progressbar(self.root)
-        self.dorks_text = tk.Text(self.root)
+        self.dorks_text = tk.Text(self.root, selectbackground='#5a5a5a', selectforeground='white')
         self.dorks_label = tk.Label(self.root)
-        self.results_text = tk.Text(self.root)
+        self.results_text = tk.Text(self.root, selectbackground='#5a5a5a', selectforeground='white')
         self.results_label = tk.Label(self.root)
         self.log_text = tk.Text(self.root)
         self.filter_entry = tk.Entry(self.root)
         self.filter_button = tk.Button(self.root)
 
         self.dorks = []
+        self.filtered_dorks = []
         self.searching = False
         self.paused_index = 0
         self.filter_criteria = ''
@@ -64,22 +65,22 @@ class DorkGeneratorApp:
         setup_ui(self)
 
     def apply_dark_mode(self):
-        self.root.configure(bg='#2e2e2e')
-        self.entry.configure(bg='#444444', fg='white')
-        self.generate_button.configure(bg='#444444', fg='white')
-        self.run_button.configure(bg='#444444', fg='white')
-        self.pause_button.configure(bg='#444444', fg='white')
-        self.dorks_text.configure(bg='#444444', fg='white')
-        self.dorks_label.configure(bg='#2e2e2e', fg='white')
-        self.results_text.configure(bg='#444444', fg='white')
-        self.results_label.configure(bg='#2e2e2e', fg='white')
-        self.log_text.configure(bg='#444444', fg='white')
-        self.filter_entry.configure(bg='#444444', fg='white')
-        self.filter_button.configure(bg='#444444', fg='white')
+        self.root.configure(bg='#1e1e1e')
+        self.entry.configure(bg='#3a3a3a', fg='white')
+        self.generate_button.configure(bg='#3a3a3a', fg='white')
+        self.run_button.configure(bg='#3a3a3a', fg='white')
+        self.pause_button.configure(bg='#3a3a3a', fg='white')
+        self.dorks_text.configure(bg='#3a3a3a', fg='white')
+        self.dorks_label.configure(bg='#1e1e1e', fg='white')
+        self.results_text.configure(bg='#3a3a3a', fg='white')
+        self.results_label.configure(bg='#1e1e1e', fg='white')
+        self.log_text.configure(bg='#3a3a3a', fg='white')
+        self.filter_entry.configure(bg='#3a3a3a', fg='white')
+        self.filter_button.configure(bg='#3a3a3a', fg='white')
 
     def log(self, message, level='info'):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        color = {'info': 'grey', 'warning': 'yellow', 'error': 'red'}[level]
+        color = {'info': 'lightgrey', 'warning': 'yellow', 'error': 'red'}[level]
         self.log_text.insert(tk.END, f"{timestamp} - {message}\n", level)
         self.log_text.tag_config(level, foreground=color)
         self.log_text.see(tk.END)
@@ -113,6 +114,8 @@ class DorkGeneratorApp:
             return
 
         self.dorks = create_dorks(html_source)
+        self.filtered_dorks = self.dorks[:]
+        self.dorks_text.delete("1.0", tk.END)
         self.dorks_text.insert(tk.END, "\n".join(self.dorks) + "\n")
         self.update_dorks_label()
         self.run_button.config(state=tk.NORMAL, text="Run Search")
@@ -149,14 +152,14 @@ class DorkGeneratorApp:
             return None
 
     async def search_dorks_async(self):
-        total_dorks = len(self.dorks)
+        total_dorks = len(self.filtered_dorks)
         self.progress["maximum"] = total_dorks
         for index in range(self.paused_index, total_dorks):
             if not self.searching:
                 self.paused_index = index
                 self.log("Search paused by user.", 'warning')
                 break
-            dork = self.dorks[index]
+            dork = self.filtered_dorks[index]
             try:
                 search_results = await self.search_google_with_zyte(dork)
                 self.display_results(search_results)
@@ -250,14 +253,53 @@ class DorkGeneratorApp:
         save_api_key(new_api_key)
         self.log("API key saved.", 'info')
 
-    def apply_filter(self):  # Add this function
+    def apply_filter(self):
         filter_text = self.filter_entry.get().strip()
         if not filter_text:
             messagebox.showerror("Input Error", "Please enter filter criteria.")
             return
 
-        filtered_dorks = [dork for dork in self.dorks if filter_text in dork]
+        self.filtered_dorks = [dork for dork in self.dorks if filter_text in dork]
         self.dorks_text.delete("1.0", tk.END)
-        self.dorks_text.insert(tk.END, "\n".join(filtered_dorks))
+        self.dorks_text.insert(tk.END, "\n".join(self.filtered_dorks) + "\n")
         self.update_dorks_label()
-        self.log(f"Applied filter: {filter_text}. {len(filtered_dorks)} dorks match the criteria.", 'info')
+        self.log(f"Applied filter: {filter_text}. {len(self.filtered_dorks)} dorks match the criteria.", 'info')
+
+    def remove_filter(self):
+        self.filtered_dorks = self.dorks[:]
+        self.dorks_text.delete("1.0", tk.END)
+        self.dorks_text.insert(tk.END, "\n".join(self.filtered_dorks) + "\n")
+        self.update_dorks_label()
+        self.log("Filter removed. Showing all dorks.", 'info')
+
+    def remove_selected_dorks(self):
+        try:
+            selected_indices = self.dorks_text.tag_ranges(tk.SEL)
+            if not selected_indices:
+                messagebox.showerror("Selection Error", "Please select one or more lines to remove.")
+                return
+            selected_lines = [int(self.dorks_text.index(index).split('.')[0]) for index in selected_indices]
+            remaining_dorks = [line for i, line in enumerate(self.filtered_dorks) if i + 1 not in selected_lines]
+            self.filtered_dorks = remaining_dorks
+            self.dorks_text.delete("1.0", tk.END)
+            self.dorks_text.insert(tk.END, "\n".join(self.filtered_dorks) + "\n")
+            self.update_dorks_label()
+            self.log(f"Removed {len(selected_lines)} selected dorks.", 'info')
+        except Exception as e:
+            self.log(f"Error removing selected dorks: {e}", 'error')
+
+    def remove_selected_results(self):
+        try:
+            selected_indices = self.results_text.tag_ranges(tk.SEL)
+            if not selected_indices:
+                messagebox.showerror("Selection Error", "Please select one or more lines to remove.")
+                return
+            selected_lines = [int(self.results_text.index(index).split('.')[0]) for index in selected_indices]
+            remaining_results = [line for i, line in enumerate(self.results_text.get("1.0", tk.END).splitlines()) if
+                                 i + 1 not in selected_lines]
+            self.results_text.delete("1.0", tk.END)
+            self.results_text.insert(tk.END, "\n".join(remaining_results) + "\n")
+            self.update_results_label()
+            self.log(f"Removed {len(selected_lines)} selected results.", 'info')
+        except Exception as e:
+            self.log(f"Error removing selected results: {e}", 'error')
